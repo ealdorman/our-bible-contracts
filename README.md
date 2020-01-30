@@ -32,6 +32,12 @@ There are many ways to migrate a contract to the Ethereum mainnet.
 
 You may be interested in [Truffle Teams](https://www.trufflesuite.com/teams) for pushing to the Ehtereum mainnet.
 
+## Testing
+
+To test the contracts, follow the steps above in **Development** to start a development blockchain with Gananche CLI, then run the follwing:
+
+`truffle test`
+
 ## Contribute
 
 Find a bug? Want to make an improvement? Submit an issue or a pull request! 😃
