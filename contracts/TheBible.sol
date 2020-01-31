@@ -4,6 +4,10 @@ pragma solidity >= 0.5.0 < 0.6.0;
 import './provableAPI_0.5.sol';
 import './strings.sol';
 
+/// @title Preserves verses from the KJV Bible on the blockchaib
+/// @author John Wall, Ealdorman, Inc.
+/// @notice Use this contract to store and retrieve Bible verses
+/// @dev The oracle used here is provided by Provable at provable.xyz
 contract TheBible is usingProvable {
   using strings for *;
 
@@ -12,7 +16,7 @@ contract TheBible is usingProvable {
   mapping(bytes32=>bool) validProvableQueryIds;
   address public owner;
   uint public provableGasLimit;
-  /**
+  /** @notice
    * At the point when all verses have been added, a user may read through all
    * verses by querying [book][chapter][verse], wherein the chapter and verse
    * are always incrementing numbers (as strings).
@@ -90,12 +94,14 @@ contract TheBible is usingProvable {
     'Zephaniah'
   ];
 
+  /// @notice Limits access to Provable contracts
   modifier onlyProvable() {
     require(msg.sender == provable_cbAddress(), 'Callback did not originate from Provable');
 
     _;
   }
   
+  /// @notice Limits access to the address from which the contract was created
   modifier onlyOwner() {
     require(msg.sender == owner, 'Only the contract creator may interact with this function');
     
@@ -104,6 +110,7 @@ contract TheBible is usingProvable {
 
   event LogNewProvableQuery(string description);
   event LogError(uint code);
+  /// @dev The LogVerseAdded event is crucial for updating the off-chain database
   event LogVerseAdded(string book, string chapter, string verse);
 
   constructor() public {
@@ -114,6 +121,8 @@ contract TheBible is usingProvable {
     provableGasLimit = 500000;
   }
 
+  /// @notice Takes a concatenated Bible verse reference and creates an oracle query
+  /// @param concatenatedReference A Bible verse in the form of book/chapter/verse, i.e. John/3/16
   function setVerse(string memory concatenatedReference) public payable {
     require(
       msg.value >= versePrice,
@@ -150,6 +159,15 @@ contract TheBible is usingProvable {
     validProvableQueryIds[queryId] = true;
   }
 
+  /** @notice
+   * Provable calls this function once it retrieves a query. The result is then
+   * processed to break the book, chapter, verse and verse text. If the result 
+   * is in the proper format, the verse is stored here in the contract. The
+   * LogVerseAdded event is then called.
+   */
+  /// @dev This function is limited to calls from Provable
+  /// @param myid The query ID provided by Provable
+  /// @param result The result provided by Provable from the query
   function __callback(bytes32 myid, string memory result) public onlyProvable() {
     require(
       validProvableQueryIds[myid] == true,
@@ -170,6 +188,12 @@ contract TheBible is usingProvable {
     emit LogVerseAdded(book, chapter, verse);
   }
 
+  /// @notice Splits the Provable result into its expected component parts or reverts if invalid
+  /** @dev 
+   * The result is expected be in the format: book---chapter---verse---text. If the result is not
+   * in that format, the transaction will revert.
+   */
+  /// @param result A string retrieved from a Provable query
   function processProvableText(string memory result) public returns (
     string memory,
     string memory,
@@ -207,10 +231,18 @@ contract TheBible is usingProvable {
     );
   }
 
+  /// @notice Check to see if a string is empty
+  /// @param _string A string for which to check whether it is empty
+  /// @return a boolean value that expresses whether the string is empty
   function textIsEmpty(string memory _string) internal pure returns(bool) {
     return bytes(_string).length == 0;
   }
 
+  /// @notice Retrieves a verse's text
+  /// @param book The book name, all of which are listed in the books array
+  /// @param chapter A chapter number, expressed as a string
+  /// @param verse A verse number, express as a string
+  /// @return Returns a verse's text if it has been stored
   function getVerse(
     string memory book,
     string memory chapter,
@@ -219,18 +251,34 @@ contract TheBible is usingProvable {
     return verses[book][chapter][verse];
   }
   
+  /// @notice Allows the contract's deployer to adjust the verse price
+  /** @dev
+   * The longest Bible verse, Esther 8:9, cost about 0.01 ETH at time of contract creation
+   * due to Provable fees. 
+   */
+  /// @param _versePrice The price a user must pay to store a verse, denominated in wei
   function setVersePrice(uint _versePrice) public onlyOwner() {
     versePrice = _versePrice;
   }
-  
+
+  /// @notice Sets the gas limit of a Provable query
+  /// @dev Because we're dealing with long strings, gas can be quite high
+  /// @param _provableGasLimit An unsigned integer, denominated in gwei
   function setProvableGasLimit(uint _provableGasLimit) public onlyOwner() {
     provableGasLimit = _provableGasLimit;
   }
   
+  /// @notice The contract's creator may withdraw any ETh accumulated in excess of Provable fees
   function withdraw() public onlyOwner() {
     msg.sender.transfer(address(this).balance);
   }
   
+  /** @notice
+   * A user does not have to interact with the setVerse function to store a Bible verse in
+   * this contract. This fallback method allows a user to simply send ETH at least equal to
+   * the versePrice, at which point a Provable query will be fired to fetch a random Bible
+   * verse.
+   */
   function() external payable {
     if (msg.value < versePrice) {
       emit LogError(3);
